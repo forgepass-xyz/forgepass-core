@@ -12,11 +12,11 @@ This monorepo contains the three tightly coupled packages that form the operatio
 
 | Package | Path | Description |
 |---|---|---|
-| **API** | `apps/api` | NestJS backend — contribution ingestion, Trust Score engine, public API |
-| **App** | `apps/web` | Next.js frontend — contributor dashboard and passport explorer |
-| **Docs** | `docs` | MDX documentation site — API reference, integration guides, architecture |
+| **API** | `apps/api` | NestJS backend: contribution ingestion, Trust Score engine, public API |
+| **App** | `apps/web` | Next.js frontend: contributor dashboard and passport explorer |
+| **Docs** | `docs` | MDX documentation site: API reference, integration guides, architecture |
 
-For the Soroban smart contracts, see [`forgepass-contracts`](https://github.com/forgepass-xyz/forgepass-contracts) (Rust — separate repo, separate toolchain).
+For the Soroban smart contracts, see [`forgepass-contracts`](https://github.com/forgepass-xyz/forgepass-contracts) (Rust, separate repo, separate toolchain).
 
 For the third-party client SDK, see [`forgepass-sdk`](https://github.com/forgepass-xyz/forgepass-sdk) (separate npm package).
 
@@ -30,7 +30,7 @@ forgepass-core/
 │   ├── api/          # NestJS backend
 │   └── web/          # Next.js frontend
 ├── docs/             # MDX documentation site
-├── package.json      # Root — npm workspaces config
+├── package.json      # Root npm workspaces config
 └── .env.example      # Shared environment variable reference
 ```
 
@@ -59,7 +59,7 @@ npm install
 cp .env.example .env
 ```
 
-Then start each package — see the README in each `apps/` directory for package-specific setup (migrations, env vars, ports).
+Then start each package; see the README in each `apps/` directory for package-specific setup (migrations, env vars, ports).
 
 ### Running everything locally
 
@@ -99,7 +99,7 @@ npm run <script> --workspace=docs
 
 ## Contributing
 
-Each package has its own `good-first-issue` labels scoped to its area. You do not need to understand the entire monorepo to contribute — pick the package that matches your skills and start there.
+Each package has its own `good-first-issue` labels scoped to its area. You do not need to understand the entire monorepo to contribute; pick the package that matches your skills and start there.
 
 - **`apps/api`** — TypeScript, NestJS, PostgreSQL
 - **`apps/web`** — TypeScript, Next.js, Tailwind CSS, Freighter SDK
