@@ -1,8 +1,5 @@
-const withNextra = require('nextra')({
-  theme: 'nextra-theme-docs',
-  themeConfig: './theme.config.tsx',
-})
+const nextConfig = {
+  /* config options here */
+};
 
-module.exports = withNextra({
-  turbopack: {},
-})
+export default nextConfig;

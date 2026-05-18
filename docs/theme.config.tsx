@@ -7,4 +7,4 @@ export default {
   footer: {
     text: 'ForgePass — MIT Licensed',
   },
-}
+};
