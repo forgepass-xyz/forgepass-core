@@ -1,0 +1,119 @@
+{
+  "version": "1.0",
+  "description": "ForgePass Trust Score algorithm v1.0 — four confirmed v1 signal types. Development signals (GitHub, Soroban) weighted at 80% combined. Financial activity signals (DEX, Aquarius) weighted at 20% combined. Per FRD v1.2 design principle: DEX and Aquarius weights are proportionally lower than development signals.",
+  "constraint_check": "w_github_pr + w_soroban_contract > w_stellar_dex + w_aquarius_lp (80% > 20% — satisfied)",
+  "signals": {
+    "GITHUB_PR": {
+      "weight": 0.50,
+      "normalisation": "log_cap_with_review_multiplier",
+      "parameters": {
+        "cap": 50,
+        "review_factor": 0.25,
+        "minimum_threshold": null
+      },
+      "formula": "min(log(pr_count + 1) / log(cap + 1), 1.0) × (1 + review_ratio × review_factor), capped at 1.0",
+      "rationale": "Primary builder signal. Rewards consistent open-source contribution to Stellar ecosystem repositories. Log scaling applies diminishing returns above the cap to prevent outlier contributors from distorting the score distribution. Review factor rewards quality — PRs that received peer review score higher than unreviewed commits. Cap set at 50 merged PRs reflecting the realistic ceiling of a prolific v1 Stellar contributor. Adjustable in future versions as ecosystem data matures."
+    },
+    "SOROBAN_CONTRACT": {
+      "weight": 0.30,
+      "normalisation": "deployment_floor_with_log_invocation_multiplier",
+      "parameters": {
+        "invocation_factor": 0.3,
+        "normalisation_max": 10,
+        "minimum_threshold": null
+      },
+      "formula": "min((deployment_count × (1 + log(total_invocations + 1) × invocation_factor)) / normalisation_max, 1.0)",
+      "rationale": "Strongest individual builder signal — demonstrates smart contract development capability on the target chain. Deployment count is the floor signal: a contributor receives credit for every deployed contract regardless of usage. Invocation volume is a log-scaled multiplier that boosts but never zeroes out the deployment score, rewarding contracts that see real usage without penalising early builders whose contracts have not yet accumulated call volume. Invocation factor set conservatively at 0.3 for v1 given sparse invocation data at Soroban ecosystem launch. Normalisation max set at 10 reflecting the realistic ceiling of a highly active v1 contract deployer."
+    },
+    "STELLAR_DEX": {
+      "weight": 0.10,
+      "normalisation": "log_soft_cap",
+      "parameters": {
+        "minimum_volume_threshold_xlm": 10,
+        "soft_cap": 10
+      },
+      "formula": "min(log(qualifying_pair_count + 1) / log(soft_cap + 1), 1.0)",
+      "rationale": "Ecosystem participation signal — rewards breadth of engagement with the Stellar DEX without treating financial activity as equivalent to builder activity. Raw value is count of unique trading pairs where at least one trade meets the minimum volume threshold. Minimum threshold of 10 XLM per qualifying trade filters dust trades and raises the cost of gaming relative to the signal's low weight. Soft cap of 10 pairs reflects the realistic ceiling of meaningful ecosystem breadth at v1 launch. Log scaling provides good discrimination across the 1-8 pair range where most contributors will sit. Intentionally weighted lower than development signals per FRD v1.2 design principle."
+    },
+    "AQUARIUS_LP": {
+      "weight": 0.10,
+      "normalisation": "square_root_scaling",
+      "parameters": {
+        "minimum_position_size_xlm": 50,
+        "normalisation_max": 30000,
+        "duration_measurement": "active_duration_only"
+      },
+      "formula": "min(sqrt(sum(position_size_xlm × duration_weeks)) / sqrt(normalisation_max), 1.0)",
+      "rationale": "Ecosystem commitment signal — distinct from DEX trading in that it rewards sustained capital allocation rather than episodic trading activity. Raw value is the sum of position size multiplied by active duration in weeks, counting only positions above the minimum size threshold. Square root scaling chosen over log scaling to provide better score distribution across small and medium position sizes without compressing genuine participants toward zero. Duration measured as active weeks only — positions that drop below the minimum size threshold stop accumulating duration score, rewarding sustained commitment. Minimum position size of 50 XLM filters dust positions. Normalisation max of 30,000 reflects the realistic ceiling of a highly committed v1 LP contributor. Weighted equal to DEX at 10% — higher than DEX would reward was considered but rejected to prevent financial activity from compensating for weak development signals in the mid-range."
+    }
+  },
+  "reserved_future_signals": {
+    "SCF_GRANT": {
+      "weight": null,
+      "status": "roadmap",
+      "note": "Planned future signal source per FR-03.6. Weight to be determined when SCF partnership and ingestion method are confirmed via decision issue #009."
+    },
+    "GRANTFOX_BOUNTY": {
+      "weight": null,
+      "status": "roadmap",
+      "note": "Planned future signal source per FR-03.4. Weight to be determined when GrantFox partnership is confirmed via decision issue #009."
+    },
+    "TRUSTLESS_WORK": {
+      "weight": null,
+      "status": "roadmap",
+      "note": "Planned future signal source per FR-03.5. Weight to be determined when Trustless Work partnership is confirmed via decision issue #009."
+    }
+  },
+  "synthetic_profile_validation": {
+    "description": "Four archetypal contributor profiles modelled against v1.0 weights. Ordering must be preserved on every algorithm version change.",
+    "profiles": {
+      "senior_stellar_developer": {
+        "inputs": {
+          "GITHUB_PR": { "pr_count": 30, "review_ratio": 0.85 },
+          "SOROBAN_CONTRACT": { "deployment_count": 3, "total_invocations": 300 },
+          "STELLAR_DEX": { "qualifying_pair_count": 2 },
+          "AQUARIUS_LP": { "position_size_xlm": 200, "duration_weeks": 8 }
+        },
+        "expected_score": 67.8,
+        "expected_rank": 1
+      },
+      "balanced_ecosystem_participant": {
+        "inputs": {
+          "GITHUB_PR": { "pr_count": 20, "review_ratio": 0.70 },
+          "SOROBAN_CONTRACT": { "deployment_count": 2, "total_invocations": 150 },
+          "STELLAR_DEX": { "qualifying_pair_count": 5 },
+          "AQUARIUS_LP": { "position_size_xlm": 300, "duration_weeks": 12 }
+        },
+        "expected_score": 64.7,
+        "expected_rank": 2
+      },
+      "new_ecosystem_contributor": {
+        "inputs": {
+          "GITHUB_PR": { "pr_count": 5, "review_ratio": 0.40 },
+          "SOROBAN_CONTRACT": { "deployment_count": 0, "total_invocations": 0 },
+          "STELLAR_DEX": { "qualifying_pair_count": 1 },
+          "AQUARIUS_LP": { "position_size_xlm": 0, "duration_weeks": 0 }
+        },
+        "expected_score": 26.4,
+        "expected_rank": 3
+      },
+      "active_defi_participant": {
+        "inputs": {
+          "GITHUB_PR": { "pr_count": 0, "review_ratio": 0.00 },
+          "SOROBAN_CONTRACT": { "deployment_count": 0, "total_invocations": 0 },
+          "STELLAR_DEX": { "qualifying_pair_count": 9 },
+          "AQUARIUS_LP": { "position_size_xlm": 800, "duration_weeks": 24 }
+        },
+        "expected_score": 19.6,
+        "expected_rank": 4
+      }
+    }
+  },
+  "changelog": [
+    {
+      "version": "1.0",
+      "date": "TBD — to be updated on ratification",
+      "summary": "Initial ratified weights. Four v1 signal types: GITHUB_PR 50%, SOROBAN_CONTRACT 30%, STELLAR_DEX 10%, AQUARIUS_LP 10%. Development signals weighted at 80% combined. Financial activity signals at 20% combined. Weights adjusted from initial 75/25 draft to 80/20 after synthetic profile validation revealed DeFi-only participants scoring comparably to genuine contributors at the 75/25 distribution."
+    }
+  ]
+}
