@@ -1,0 +1,134 @@
+{
+  "version": "1.0",
+  "description": "ForgePass sybil resistance gate thresholds v1.0. These values are enforcement values, not scoring values. They determine who is permitted to create a Builder Passport. They are intentionally not published in user-facing documentation beyond the minimum requirement values surfaced in rejection messages.",
+  "gates": {
+    "stellar_account_age": {
+      "minimum_days": 60,
+      "data_source": "Stellar Horizon API — GET /accounts/{wallet} — created_at field",
+      "logic": "historical check — days elapsed since created_at must be >= minimum_days at time of onboarding attempt",
+      "rationale": "60 days represents two monthly cycles, enough to deter opportunistic and lightly organised sybil attempts without excluding genuine new contributors. A 30-day window is too easily planned around by any organised sybil operation running on a monthly cadence. 90 days risks excluding genuine new developers who discovered Stellar recently and are moving quickly to get involved. At 60 days, combined with the XLM balance and GitHub gates, a qualifying wallet represents a meaningful sustained Stellar presence. Precedent range across comparable Stellar ecosystem projects is 30 to 90 days. 60 days sits deliberately in the middle of that range.",
+      "rejection_message": "Your Stellar wallet was created {elapsed_days} days ago. A minimum of 60 days is required to create a Builder Passport. You will be eligible in {days_remaining} days.",
+      "re_verification_trigger": "not_applicable — Stellar account age can only increase and cannot fall below the threshold after passport creation"
+    },
+    "xlm_balance": {
+      "minimum_average_xlm": 10,
+      "measurement_window_days": 30,
+      "data_source": "Stellar Horizon API — GET /accounts/{wallet} — transaction history over preceding 30 days, native balance reconstructed from payment operations",
+      "logic": "rolling average check — average native XLM balance over the preceding 30 days must be >= minimum_average_xlm at time of onboarding attempt",
+      "rationale": "10 XLM was chosen for consistency with the DEX signal minimum trade threshold established in the Trust Score algorithm (signal-definitions.md). A 30-day rolling average rather than a point-in-time check prevents temporary wallet funding to pass the gate and immediately drain. At 10 XLM average over 30 days, creating 1000 fake qualifying accounts requires maintaining 10,000 XLM in sustained average balance, making sybil farming economically irrational relative to the cost. 10 XLM sits well above the Stellar base reserve of 1 XLM without imposing a meaningful financial barrier on genuine developers regardless of economic background. The Stellar base reserve (currently 1 XLM) is explicitly not a viable threshold as it provides no meaningful resistance.",
+      "rejection_message": "Your Stellar wallet's average XLM balance over the past 30 days is {current_average} XLM. A minimum average of 10 XLM is required. Top up your wallet and maintain that balance for 30 days before retrying.",
+      "re_verification_trigger": {
+        "enabled": true,
+        "condition": "30-day rolling average XLM balance drops below minimum_average_xlm after passport creation",
+        "action": "flag passport for re-verification per FR-01.8 — contributor notified to restore balance. Re-verification flags the passport but does not revoke it. Passport revocation is not permitted under FR-02.3 and the non-revocability guarantee is not affected by this trigger.",
+        "check_frequency": "evaluated on each scheduled indexer run"
+      }
+    },
+    "github_activity": {
+      "minimum_account_age_days": 180,
+      "minimum_public_repos": 1,
+      "stellar_contribution_qualifies": true,
+      "stellar_contribution_definition": "at least one merged pull request into a repository registered in the ForgePass Stellar ecosystem repository registry",
+      "gate_logic": "AND: account_age >= minimum_account_age_days AND (public_repos >= minimum_public_repos OR stellar_contribution == true)",
+      "data_source": "GitHub REST API — GET /users/{username} for account age and public_repos count. Stellar contribution verified against the registered repository list via GitHub PR search API.",
+      "rationale": "180 days (6 months) was chosen as the GitHub account age minimum because GitHub account age is a weaker signal than Stellar wallet age — a GitHub account can sit dormant for years without any cost to the owner. A higher age threshold compensates for this weakness. At 180 days, a sybil operator would need to create GitHub accounts 6 months in advance, which combined with the AND logic requiring activity to also pass, creates a meaningful combined barrier. The public repo minimum of 1 is deliberately low because the Stellar contribution alternative path is the preferred qualifying route and the age gate is doing the primary filtering on the default path. A single public repository on a 6-month-old account is a credible signal of a real developer. The OR logic between public_repos and stellar_contribution ensures that contributors who work primarily by contributing to others' repositories rather than maintaining their own are not excluded. A merged PR into a registered Stellar repo is a peer-reviewed contribution and a stronger signal of genuine builder intent than a public repo alone. Gitcoin Passport uses 90 days for their GitHub stamp as a reference point. ForgePass uses 180 days because our gate is a hard filter with no composite fallback, unlike Gitcoin's additive stamp system.",
+      "failure_states": {
+        "age_check_fails": {
+          "rejection_message": "Your GitHub account was created {elapsed_days} days ago. A minimum of 180 days is required. Your account will meet this requirement in {days_remaining} days.",
+          "dispute_available": false,
+          "dispute_rationale": "Account age is a deterministic check with no data ambiguity. The contributor simply needs to wait."
+        },
+        "activity_check_fails": {
+          "rejection_message": "Your GitHub account meets the age requirement but does not yet meet the activity criteria. You need at least one public repository or one merged pull request into a registered Stellar ecosystem repository to qualify.",
+          "dispute_available": true,
+          "dispute_type": "ONBOARDING_GATE_REJECTION",
+          "dispute_rationale": "The GitHub API occasionally returns stale or incorrect data. A contributor who genuinely meets the activity criteria but fails due to a data issue has a legitimate basis for admin review."
+        }
+      },
+      "re_verification_trigger": "not_applicable — GitHub account age and public repo count can only increase and cannot fall below thresholds after passport creation"
+    },
+    "duplicate_identity": {
+      "rule": "one GitHub identity may be linked to exactly one Stellar wallet address. One Stellar wallet address may be linked to exactly one GitHub identity.",
+      "data_source": "ForgePass PostgreSQL contributors table — wallet_address and github_user_id unique constraint check",
+      "rejection_message": "This GitHub account is already linked to a different Stellar wallet. Each GitHub identity may only be linked to one Builder Passport. If you believe this is an error or your account has been compromised, please submit a dispute and our team will review it within 7 days.",
+      "dispute_available": true,
+      "dispute_type": "DUPLICATE_IDENTITY",
+      "dispute_rationale": "A contributor may have multiple Stellar wallets and linked the wrong one, or their GitHub account may have been compromised and linked to an unknown wallet without their knowledge. Both scenarios warrant admin review."
+    }
+  },
+  "dispute_pathway": {
+    "endpoint": "POST /disputes",
+    "dispute_types": [
+      "ONBOARDING_GATE_REJECTION",
+      "DUPLICATE_IDENTITY"
+    ],
+    "sla_days": 7,
+    "documentation": "docs.forgepass.xyz/onboarding/appeal",
+    "non_disputable_gates": [
+      "stellar_account_age",
+      "xlm_balance",
+      "github_activity_age_check"
+    ],
+    "non_disputable_rationale": "Stellar account age, XLM rolling average, and GitHub account age failures are deterministic checks with no data ambiguity. The contributor resolves them by waiting or topping up their wallet. No admin intervention is required or useful for these failure types."
+  },
+  "synthetic_profile_validation": {
+    "description": "Four archetypal contributor profiles validated against these thresholds to confirm correct pass/fail outcomes before ratification.",
+    "profiles": {
+      "legitimate_new_developer": {
+        "stellar_account_age_days": "45 to 90",
+        "xlm_30day_average": "10 to 30",
+        "github_account_age_days": "365 to 730",
+        "public_repos": "3 to 5",
+        "stellar_contribution": false,
+        "gate_1_result": "CONDITIONAL — passes at 60+ days, borderline cases at 45 to 59 days wait briefly",
+        "gate_2_result": "PASS",
+        "gate_3_result": "PASS",
+        "overall": "PASS — borderline wallet age cases are asked to wait, not permanently excluded"
+      },
+      "sybil_farm_account": {
+        "stellar_account_age_days": "1 to 7",
+        "xlm_30day_average": "1.5 to 2",
+        "github_account_age_days": "1 to 14",
+        "public_repos": "0",
+        "stellar_contribution": false,
+        "gate_1_result": "FAIL",
+        "gate_2_result": "FAIL",
+        "gate_3_result": "FAIL",
+        "overall": "FAIL — fails all three gates with no path through"
+      },
+      "active_defi_only_wallet": {
+        "stellar_account_age_days": "365 to 730",
+        "xlm_30day_average": "500 to 1000",
+        "github_account_age_days": "0 or minimal",
+        "public_repos": "0",
+        "stellar_contribution": false,
+        "gate_1_result": "PASS",
+        "gate_2_result": "PASS",
+        "gate_3_result": "FAIL — no GitHub presence meets the 180-day age or activity criteria",
+        "overall": "FAIL — financially active but non-developer Stellar participants cannot receive a Builder Passport"
+      },
+      "abandoned_and_recovered_wallet": {
+        "stellar_account_age_days": "730 to 1095",
+        "xlm_30day_average": "conditional — depends on when wallet was re-funded",
+        "github_account_age_days": "730+",
+        "public_repos": "5+",
+        "stellar_contribution": true,
+        "gate_1_result": "PASS",
+        "gate_2_result": "CONDITIONAL — passes if wallet was re-funded 30+ days ago, fails if re-funded recently and 30-day average is dragged down by preceding near-zero period",
+        "gate_3_result": "PASS",
+        "overall": "CONDITIONAL — gates 1 and 3 pass cleanly. Gate 2 depends on re-funding timing. Contributor who re-funded recently waits out the rolling average window and retries. Not a broken outcome."
+      }
+    }
+  },
+  "review_schedule": {
+    "policy": "Thresholds are considered stable at v1.0 until a deliberate threshold change is initiated by the ForgePass core team. A threshold review is recommended after 6 months of live passport data to assess whether real contributor distributions suggest recalibration is needed.",
+    "next_review": "6 months after mainnet launch"
+  },
+  "changelog": [
+    {
+      "version": "1.0",
+      "date": "2026-05-23",
+      "summary": "Initial ratified thresholds. Stellar account age 60 days. XLM 30-day rolling average 10 XLM. GitHub account age 180 days, minimum 1 public repo or 1 merged Stellar PR. Two dispute types defined. Four synthetic profiles validated."
+    }
+  ]
+}
