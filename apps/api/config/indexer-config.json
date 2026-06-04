@@ -1,0 +1,108 @@
+{
+  "version": "1.0",
+  "description": "ForgePass indexer polling strategy — v1 signal sources only. Three confirmed v1 sources: GitHub (Stellar ecosystem repos), Stellar Horizon (transactions, trades, operations), and Aquarius LP (via Horizon operations pass). GrantFox, Trustless Work, and SCF are reserved as future sources pending partnership confirmation in #009.",
+  "sources": {
+    "github": {
+      "primary_mechanism": "rest_polling",
+      "token_type": "github_app_installation_token",
+      "query_strategy": "per_registered_repo",
+      "polling_interval_minutes": 15,
+      "cursor_type": "iso8601_timestamp",
+      "cursor_field": "merged_at",
+      "page_size": 100,
+      "rate_limit_header": "X-RateLimit-Remaining",
+      "rate_limit_pause_threshold": 100,
+      "rationale": "Polling-primary chosen over webhooks for uniform coverage of all registered Stellar repos, including those outside the forgepass-xyz GitHub organisation where org-level webhooks would not apply. GitHub App installation token provides 15,000 req/hr — sufficient for up to 500 registered repos at 15-minute intervals. Per-repo query strategy fetches all merged PRs since last cursor and matches contributors by GitHub username, avoiding the per-contributor per-repo combinatorial explosion. Webhooks were evaluated and ruled out: org-level webhooks cover only forgepass-xyz-internal repos, requiring polling for external Stellar repos regardless, making a dual architecture unjustified."
+    },
+    "horizon": {
+      "passes": {
+        "HORIZON_TRANSACTIONS": {
+          "endpoint": "/accounts/{id}/transactions",
+          "primary_mechanism": "batch_polling",
+          "polling_interval_minutes": 5,
+          "cursor_type": "paging_token",
+          "cursor_field": "paging_token",
+          "order": "asc",
+          "page_size": 200,
+          "covers_signal_types": ["STELLAR_ACTIVITY"],
+          "rationale": "Batch polling chosen over SSE streaming. Public Horizon endpoint rate-limits at 3,600 req/hr per IP; SSE heartbeats count as requests (~720/hr per open stream), making streaming infeasible at scale on the public endpoint. Third-party providers remove the rate limit but add infrastructure cost and vendor dependency for a latency benefit that is invisible to downstream consumers of a reputation system with a 60-second recalculation SLA. 5-minute polling interval is well within acceptable lag. paging_token cursor is monotonically increasing, durable across process restarts, and gap-free."
+        },
+        "HORIZON_TRADES": {
+          "endpoint": "/accounts/{id}/trades",
+          "primary_mechanism": "batch_polling",
+          "polling_interval_minutes": 5,
+          "cursor_type": "paging_token",
+          "cursor_field": "paging_token",
+          "order": "asc",
+          "page_size": 200,
+          "covers_signal_types": ["STELLAR_DEX"],
+          "rationale": "Separate pass from HORIZON_TRANSACTIONS for independent cursor management and failure isolation per the indexer_runs design decision. A failure in trade indexing must not stall transaction indexing for the same contributor. Identical polling mechanism and interval to HORIZON_TRANSACTIONS for scheduler simplicity."
+        },
+        "HORIZON_OPERATIONS": {
+          "endpoint": "/accounts/{id}/operations",
+          "primary_mechanism": "batch_polling",
+          "polling_interval_minutes": 5,
+          "cursor_type": "paging_token",
+          "cursor_field": "paging_token",
+          "order": "asc",
+          "page_size": 200,
+          "covers_signal_types": ["SOROBAN_CONTRACT", "AQUARIUS_LP"],
+          "operation_type_filters": {
+            "SOROBAN_CONTRACT": [
+              "invoke_host_function"
+            ],
+            "AQUARIUS_LP": [
+              "change_trust",
+              "liquidity_pool_deposit",
+              "liquidity_pool_withdraw"
+            ]
+          },
+          "aquarius_note": "Aquarius LP positions are sourced from this pass rather than from the Aquarius API directly. The Aquarius API does not document a per-account LP position endpoint, has no published rate limits, exposes no streaming interface, and rotates contract addresses on testnet. LP share trustlines and deposit/withdrawal operations are fully visible in the Horizon operations stream, removing the need for a separate Aquarius API dependency. Current LP share balances are additionally readable from account trustlines via GET /accounts/{id} as a supplementary call within this pass.",
+          "rationale": "Soroban contract deployments (invoke_host_function) and Aquarius LP events (liquidity_pool_deposit, liquidity_pool_withdraw) both surface in the account operations stream, making a single pass sufficient for both signal types at no extra request cost. Uniform 5-minute interval with other Horizon passes maintains a single scheduler cadence and avoids special-casing."
+        }
+      },
+      "provider": "public_sdf",
+      "provider_note": "Public SDF Horizon endpoint (https://horizon.stellar.org) used for v1. Horizon historical data truncated to 1 year as of August 2024 on the public endpoint — contributors with activity older than 1 year will require a third-party provider (QuickNode, Blockdaemon) or self-hosted Horizon for full history ingestion on first onboarding. Third-party provider to be re-evaluated if contributor scale exceeds public rate limit headroom or sub-5-minute latency becomes a product requirement."
+    }
+  },
+  "indexer_runs_schema": {
+    "description": "Required columns for the indexer_runs table in #013. One row per contributor per pass type.",
+    "columns": {
+      "run_id": "UUID — primary key",
+      "pass_type": "ENUM — GITHUB_PRS | HORIZON_TRANSACTIONS | HORIZON_TRADES | HORIZON_OPERATIONS",
+      "wallet_address": "FK → passports.wallet_address",
+      "status": "ENUM — SUCCESS | FAILURE | PARTIAL",
+      "last_successful_cursor": "TEXT — ISO 8601 timestamp for GITHUB_PRS; paging_token string for Horizon passes",
+      "last_run_at": "TIMESTAMP — when this pass last executed",
+      "consecutive_failure_count": "INTEGER — resets to 0 on any SUCCESS; alert threshold is 3",
+      "failure_reason": "TEXT — last error message or null on success"
+    }
+  },
+  "reserved_future_sources": {
+    "GRANTFOX_BOUNTY": {
+      "status": "roadmap",
+      "gated_on": "#009 (FR-09-B — GrantFox partnership confirmation)",
+      "expected_mechanism": "webhook_or_polling",
+      "note": "Strategy block to be populated when GrantFox partnership is confirmed. Ingestion method (webhook vs polling) to be determined based on GrantFox API availability. A GRANTFOX_BOUNTY pass_type will be added to the indexer_runs ENUM at that time."
+    },
+    "TRUSTLESS_WORK": {
+      "status": "roadmap",
+      "gated_on": "#009 (FR-09-B — Trustless Work partnership confirmation)",
+      "expected_mechanism": "webhook",
+      "note": "Strategy block to be populated when Trustless Work partnership is confirmed. Milestone completion events expected via webhook with HMAC signature verification. A TRUSTLESS_WORK pass_type will be added to the indexer_runs ENUM at that time."
+    },
+    "SCF_GRANT": {
+      "status": "roadmap",
+      "gated_on": "#009 (FR-09-B — SCF partnership confirmation and ingestion method agreement)",
+      "expected_mechanism": "csv_batch_or_api",
+      "note": "Strategy block to be populated when SCF partnership and ingestion method are confirmed. SCF does not currently expose a public API. A SCF_GRANT pass_type will be added to the indexer_runs ENUM at that time."
+    }
+  },
+  "changelog": [
+    {
+      "version": "1.0",
+      "date": "2026-05-23",
+      "summary": "Initial strategy. Three v1 sources defined. GitHub: REST polling, GitHub App installation token, per-repo query strategy, 15-minute interval, merged_at ISO 8601 cursor. Horizon: three independent passes (HORIZON_TRANSACTIONS, HORIZON_TRADES, HORIZON_OPERATIONS) each at 5-minute intervals with paging_token cursor. SSE streaming ruled out. Aquarius API ruled out in favour of Horizon operations pass. Three future sources reserved: GRANTFOX_BOUNTY, TRUSTLESS_WORK, SCF_GRANT — all gated on #009."
+    }
+  ]
+}
