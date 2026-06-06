@@ -78,6 +78,65 @@
       "failure_reason": "TEXT — last error message or null on success"
     }
   },
+  "failure_model": {
+    "retry_policy": {
+      "max_retries_per_run": 3,
+      "backoff_strategy": "exponential_with_jitter",
+      "backoff_base_delay_seconds": 5,
+      "backoff_multiplier": 2,
+      "backoff_max_delay_seconds": 60,
+      "backoff_jitter_percent": 20,
+      "retry_sequence_note": "Approximate retry delays: ~5s, ~10s, ~20s (with jitter). Total max wait before skip ~35s — well within any configured polling interval.",
+      "jitter_rationale": "Jitter prevents thundering herd on concurrent contributor passes failing in the same cycle and retrying in lockstep against the same external API."
+    },
+    "consecutive_failure_alert_threshold": 3,
+    "consecutive_failure_note": "Counter is per pass_type per contributor in indexer_runs. A single SUCCESS resets consecutive_failure_count to 0. Alert fires when threshold is reached, not on every subsequent failure.",
+    "failure_isolation": "Passes run independently per contributor. A failure in one pass_type does not stall other pass_types for the same contributor in the same cycle.",
+    "credential_safety": "A pass failure is a skip, not a rollback. Existing credential records are never modified or deleted on failure. The next successful run resumes from last_successful_cursor.",
+    "alerts": {
+      "INDEXER_PASS_FAILURE": {
+        "trigger": "consecutive_failure_count reaches 3 for any pass_type + wallet_address combination",
+        "scope": "per_contributor_per_pass",
+        "severity": "high",
+        "action": "Log structured error with pass_type, wallet_address, failure_reason, and run_id. Fire alert to on-call channel. Do not halt other passes for the same contributor.",
+        "implements": ["#078", "NFR-16.2"]
+      },
+      "INDEXER_APP_TOKEN_FAILURE": {
+        "trigger": "GitHub API returns 401 or 403 on any request using the GitHub App installation token",
+        "scope": "global — affects all contributors' GITHUB_PRS passes simultaneously",
+        "severity": "critical",
+        "action": "Halt the GitHub indexer immediately. Do not retry until token is refreshed — retrying burns quota against a known-broken token. Log response status and request URL. Fire high-severity alert to on-call channel.",
+        "distinction_from_pass_failure": "A token failure is categorically different from a per-contributor pass failure. Blast radius is global — waiting for 3 per-contributor consecutive failures to surface this would delay detection by up to 3 full polling cycles.",
+        "implements": ["#078"]
+      },
+      "INDEXER_RATE_LIMIT_HIT": {
+        "trigger": "GitHub: X-RateLimit-Remaining drops below 100. Horizon: 429 response received during any pass.",
+        "scope": "per_source — GitHub rate limit is shared across all contributors",
+        "severity": "warning",
+        "action": "Pause the affected source. Resume after Retry-After header window or backoff period. Log the event. Fire alert if rate limit is hit on more than 3 consecutive runs — indicates polling interval is too aggressive for current contributor volume.",
+        "implements": ["#078", "NFR-16.2"]
+      },
+      "INDEXER_CURSOR_STALE": {
+        "trigger": "last_successful_cursor has not advanced for more than 2x the configured polling_interval_minutes for a given pass_type + wallet_address",
+        "scope": "per_contributor_per_pass",
+        "severity": "warning",
+        "action": "Log warning at 2x interval. Fire alert at 3x interval. Investigate scheduler health and whether the contributor's pass is being enqueued correctly. This is distinct from INDEXER_PASS_FAILURE — a stale cursor may indicate a scheduling gap rather than an API failure.",
+        "implements": ["#078"]
+      }
+    },
+    "log_event_format": {
+      "run_id": "UUID — indexer_runs primary key",
+      "pass_type": "ENUM — GITHUB_PRS | HORIZON_TRANSACTIONS | HORIZON_TRADES | HORIZON_OPERATIONS",
+      "wallet_address": "Contributor Stellar public key",
+      "status": "ENUM — SUCCESS | FAILURE | PARTIAL",
+      "failure_reason": "HTTP status + message, or exception type and message. Null on success.",
+      "retry_count": "Integer 0-3",
+      "consecutive_failures": "Current consecutive_failure_count value after this run",
+      "cursor_before": "Cursor value at start of run",
+      "cursor_after": "Cursor value at end of run. Null on failure.",
+      "timestamp": "ISO 8601"
+    }
+  },
   "reserved_future_sources": {
     "GRANTFOX_BOUNTY": {
       "status": "roadmap",
@@ -102,7 +161,7 @@
     {
       "version": "1.0",
       "date": "2026-05-23",
-      "summary": "Initial strategy. Three v1 sources defined. GitHub: REST polling, GitHub App installation token, per-repo query strategy, 15-minute interval, merged_at ISO 8601 cursor. Horizon: three independent passes (HORIZON_TRANSACTIONS, HORIZON_TRADES, HORIZON_OPERATIONS) each at 5-minute intervals with paging_token cursor. SSE streaming ruled out. Aquarius API ruled out in favour of Horizon operations pass. Three future sources reserved: GRANTFOX_BOUNTY, TRUSTLESS_WORK, SCF_GRANT — all gated on #009."
+      "summary": "Initial strategy. Three v1 sources defined. GitHub: REST polling, GitHub App installation token, per-repo query strategy, 15-minute interval, merged_at ISO 8601 cursor. Horizon: three independent passes (HORIZON_TRANSACTIONS, HORIZON_TRADES, HORIZON_OPERATIONS) each at 5-minute intervals with paging_token cursor. SSE streaming ruled out. Aquarius API ruled out in favour of Horizon operations pass. Three future sources reserved: GRANTFOX_BOUNTY, TRUSTLESS_WORK, SCF_GRANT — all gated on #009. Failure model: exponential backoff (5s base, 2x multiplier, 60s max, 20% jitter), 3-retry limit, 3-consecutive-cycle alert threshold. Four alerts: INDEXER_PASS_FAILURE, INDEXER_APP_TOKEN_FAILURE, INDEXER_RATE_LIMIT_HIT, INDEXER_CURSOR_STALE."
     }
   ]
 }
