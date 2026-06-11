@@ -1,6 +1,6 @@
 # forgepass-core
 
-**The core monorepo for ForgePass — backend API, contributor dashboard, and documentation**
+**The core monorepo for ForgePass: backend API, contributor dashboard, and documentation**
 
 This monorepo contains the three tightly coupled packages that form the operational heart of ForgePass. They share a Node.js 18+ toolchain, deploy together, and are maintained by the ForgePass core team.
 
