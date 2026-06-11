@@ -92,8 +92,8 @@ npm run <script> --workspace=docs
 
 ## Relationship to Other Repos
 
-- **[`forgepass-contracts`](https://github.com/forgepass-xyz/forgepass-contracts)** — `apps/api` reads from and writes to these Soroban contracts.
-- **[`forgepass-sdk`](https://github.com/forgepass-xyz/forgepass-sdk)** — third-party projects use the SDK to consume the API that `apps/api` serves.
+- **[`forgepass-contracts`](https://github.com/forgepass-xyz/forgepass-contracts)**: `apps/api` reads from and writes to these Soroban contracts.
+- **[`forgepass-sdk`](https://github.com/forgepass-xyz/forgepass-sdk)**: third-party projects use the SDK to consume the API that `apps/api` serves.
 
 ---
 
@@ -101,8 +101,8 @@ npm run <script> --workspace=docs
 
 Each package has its own `good-first-issue` labels scoped to its area. You do not need to understand the entire monorepo to contribute; pick the package that matches your skills and start there.
 
-- **`apps/api`** — TypeScript, NestJS, PostgreSQL
-- **`apps/web`** — TypeScript, Next.js, Tailwind CSS, Freighter SDK
-- **`docs`** — MDX, documentation writing
+- **`apps/api`**: TypeScript, NestJS, PostgreSQL
+- **`apps/web`**: TypeScript, Next.js, Tailwind CSS, Freighter SDK
+- **`docs`**: MDX, documentation writing
 
 All code is **MIT licensed**.
