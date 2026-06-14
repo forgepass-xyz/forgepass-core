@@ -1,0 +1,328 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/forgepass-xyz/forgepass-core/apps/api/config/ai-summary-prompt-context-schema.json",
+  "title": "ForgePass AI Summary PromptContext Schema",
+  "description": "Machine-readable schema for the data object passed to the Anthropic API for contributor summary generation. Every field present in a valid PromptContext instance has passed the runtime privacy filter. Fields absent from a PromptContext instance are absent because they are NEVER-INCLUDE fields or because the contributor's privacy_settings excluded them. See docs/ai-summary-prompt.md for the full field classification rationale.",
+  "version": "1.0",
+  "issue": "#007",
+  "phase": "0",
+  "generated_by": "ForgePass Issue #007 - AI Summary Prompt Fields and Privacy Review",
+  "unlocks": ["#063", "#064", "#065"],
+  "type": "object",
+  "required": ["contributor", "badges"],
+  "additionalProperties": false,
+  "properties": {
+    "contributor": {
+      "type": "object",
+      "description": "Core contributor metadata. All four fields are ALWAYS-INCLUDE. Never filtered by privacy_settings.",
+      "required": ["ecosystem_tenure_days", "trust_score", "score_computed_at"],
+      "additionalProperties": false,
+      "properties": {
+        "github_username": {
+          "type": ["string", "null"],
+          "description": "ALWAYS-INCLUDE. Verified GitHub username. Null when no GitHub account linked. Referenced by system prompt Rule 9.",
+          "classification": "ALWAYS-INCLUDE",
+          "source_field": "passports.github_username",
+          "privacy_key": null
+        },
+        "ecosystem_tenure_days": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "ALWAYS-INCLUDE. Derived from passports.created_at. Full days since passport creation.",
+          "classification": "ALWAYS-INCLUDE",
+          "source_field": "passports.created_at",
+          "derivation": "EXTRACT(DAY FROM NOW() - created_at)::integer",
+          "privacy_key": null
+        },
+        "trust_score": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "ALWAYS-INCLUDE. Current computed Trust Score (0-100). System prompt Rule 6 instructs the model to describe it as a computed contribution metric.",
+          "classification": "ALWAYS-INCLUDE",
+          "source_field": "passports.trust_score",
+          "privacy_key": null
+        },
+        "score_computed_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ALWAYS-INCLUDE. ISO 8601 timestamp of most recent Trust Score computation.",
+          "classification": "ALWAYS-INCLUDE",
+          "source_field": "trust_score_snapshots.computed_at",
+          "privacy_key": null
+        }
+      }
+    },
+    "credentials": {
+      "type": "object",
+      "description": "COND-INCLUDE. Absent when all four signal types are private. Individual sub-keys absent when the corresponding signal type is private. Absent means the key does not exist, not null, not empty object.",
+      "additionalProperties": false,
+      "properties": {
+        "github_prs": {
+          "type": "object",
+          "description": "COND-INCLUDE. Absent when privacy_settings.github = false.",
+          "classification": "COND-INCLUDE",
+          "privacy_key": "github",
+          "privacy_settings_condition": "privacy_settings->>'github' = true",
+          "source_table": "credentials",
+          "source_signal_type": "GITHUB_PR",
+          "required": ["total_merged", "repository_count", "date_range"],
+          "additionalProperties": false,
+          "properties": {
+            "total_merged": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Total merged pull requests across all registered Stellar repositories."
+            },
+            "repository_count": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Number of distinct repositories in which at least one PR was merged."
+            },
+            "date_range": {
+              "type": "object",
+              "required": ["earliest", "latest"],
+              "additionalProperties": false,
+              "properties": {
+                "earliest": { "type": "string", "format": "date-time" },
+                "latest": { "type": "string", "format": "date-time" }
+              }
+            }
+          }
+        },
+        "soroban_contracts": {
+          "type": "object",
+          "description": "COND-INCLUDE. Absent when privacy_settings.soroban = false.",
+          "classification": "COND-INCLUDE",
+          "privacy_key": "soroban",
+          "privacy_settings_condition": "privacy_settings->>'soroban' = true",
+          "source_table": "credentials",
+          "source_signal_type": "SOROBAN_CONTRACT",
+          "required": ["total_deployed", "total_invocations", "date_range"],
+          "additionalProperties": false,
+          "properties": {
+            "total_deployed": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Total Soroban contracts deployed by the contributor's wallet."
+            },
+            "total_invocations": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Cumulative invocation count across all deployed contracts."
+            },
+            "date_range": {
+              "type": "object",
+              "required": ["earliest", "latest"],
+              "additionalProperties": false,
+              "properties": {
+                "earliest": { "type": "string", "format": "date-time" },
+                "latest": { "type": "string", "format": "date-time" }
+              }
+            }
+          }
+        },
+        "stellar_dex": {
+          "type": "object",
+          "description": "COND-INCLUDE. Absent when privacy_settings.dex = false. Covers STELLAR_DEX credentials. AQUARIUS_LP is a scoring sub-signal under the dex privacy key with no separate toggle.",
+          "classification": "COND-INCLUDE",
+          "privacy_key": "dex",
+          "privacy_settings_condition": "privacy_settings->>'dex' = true",
+          "source_table": "credentials",
+          "source_signal_type": "STELLAR_DEX",
+          "required": ["total_trades", "date_range"],
+          "additionalProperties": false,
+          "properties": {
+            "total_trades": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Total DEX trades recorded for the contributor's wallet."
+            },
+            "date_range": {
+              "type": "object",
+              "required": ["earliest", "latest"],
+              "additionalProperties": false,
+              "properties": {
+                "earliest": { "type": "string", "format": "date-time" },
+                "latest": { "type": "string", "format": "date-time" }
+              }
+            }
+          }
+        },
+        "hackathons": {
+          "type": "object",
+          "description": "COND-INCLUDE. Absent when privacy_settings.hackathon = false.",
+          "classification": "COND-INCLUDE",
+          "privacy_key": "hackathon",
+          "privacy_settings_condition": "privacy_settings->>'hackathon' = true",
+          "source_table": "credentials",
+          "source_signal_type": "HACKATHON",
+          "required": ["total_participated", "events"],
+          "additionalProperties": false,
+          "properties": {
+            "total_participated": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Total hackathon events participated in."
+            },
+            "events": {
+              "type": "array",
+              "description": "Event names only. No dates, wallet addresses, placements, or identifiers. Transformation applied at the data fetch layer.",
+              "items": { "type": "string" },
+              "maxItems": 10
+            }
+          }
+        }
+      }
+    },
+    "badges": {
+      "type": "array",
+      "description": "ALWAYS-INCLUDE. Always present as an array; may be empty. Independent of privacy_settings per FR-05.5. Capped at 10 most recent, ordered by minted_at descending.",
+      "classification": "ALWAYS-INCLUDE",
+      "privacy_key": null,
+      "source_table": "badges",
+      "maxItems": 10,
+      "items": {
+        "type": "object",
+        "required": ["milestone_type", "minted_at"],
+        "additionalProperties": false,
+        "properties": {
+          "milestone_type": {
+            "type": "string",
+            "description": "Milestone type identifier. Values defined in milestone-registry.json from Issue #008.",
+            "examples": ["FIRST_PR", "FIRST_CONTRACT", "HACKATHON_PARTICIPANT", "MULTI_REPO_CONTRIBUTOR", "FIRST_SOROBAN_INVOCATION"]
+          },
+          "minted_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "ISO 8601 timestamp of on-chain badge mint."
+          }
+        }
+      }
+    },
+    "collaborations": {
+      "type": "object",
+      "description": "COND-INCLUDE. Absent when all signal types are private. Sub-keys absent when the corresponding signal type is private. Third-party wallet addresses and project names are NEVER-INCLUDE.",
+      "additionalProperties": false,
+      "properties": {
+        "co_pr_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "COND-INCLUDE. Unique contributors co-authored or co-reviewed PRs with. Absent when privacy_settings.github = false.",
+          "classification": "COND-INCLUDE",
+          "privacy_key": "github",
+          "source_table": "contributor_edges",
+          "source_collaboration_type": "CO_PR"
+        },
+        "co_contract_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "COND-INCLUDE. Unique contributors co-deployed Soroban contracts with. Absent when privacy_settings.soroban = false.",
+          "classification": "COND-INCLUDE",
+          "privacy_key": "soroban",
+          "source_table": "contributor_edges",
+          "source_collaboration_type": "CO_CONTRACT"
+        }
+      }
+    },
+    "score_breakdown": {
+      "type": "object",
+      "description": "COND-INCLUDE with all-or-nothing rule (Option B). Absent when ANY of the four signal types is private. Never partially populated. SQL WHERE clause requires all four privacy_settings keys to be true or returns zero rows.",
+      "classification": "COND-INCLUDE",
+      "privacy_keys": ["github", "soroban", "dex", "hackathon"],
+      "privacy_settings_condition": "ALL of privacy_settings->>'github', ->>'soroban', ->>'dex', ->>'hackathon' must equal true",
+      "omission_policy": "Option B: absent when ANY signal type is private. Partial percentages omitted because they allow inference of private signal existence via arithmetic. Re-normalised percentages omitted because they misrepresent actual score composition.",
+      "source_table": "trust_score_snapshots",
+      "source_field": "breakdown",
+      "required": ["github_pct", "soroban_pct", "dex_pct", "hackathon_pct"],
+      "additionalProperties": false,
+      "properties": {
+        "github_pct": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "GitHub PR signal percentage contribution to total Trust Score."
+        },
+        "soroban_pct": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Soroban contract signal percentage contribution to total Trust Score."
+        },
+        "dex_pct": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Stellar DEX and Aquarius LP signal percentage contribution to total Trust Score."
+        },
+        "hackathon_pct": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Hackathon participation signal percentage contribution to total Trust Score."
+        }
+      }
+    }
+  },
+  "absence_rules": {
+    "note": "Absent means the key is not present in the object. Not null. Not empty object. Not zero. The key does not exist.",
+    "rules": [
+      { "key": "credentials", "absent_when": "All four signal types are private" },
+      { "key": "credentials.github_prs", "absent_when": "privacy_settings.github = false" },
+      { "key": "credentials.soroban_contracts", "absent_when": "privacy_settings.soroban = false" },
+      { "key": "credentials.stellar_dex", "absent_when": "privacy_settings.dex = false" },
+      { "key": "credentials.hackathons", "absent_when": "privacy_settings.hackathon = false" },
+      { "key": "collaborations", "absent_when": "All four signal types are private" },
+      { "key": "collaborations.co_pr_count", "absent_when": "privacy_settings.github = false" },
+      { "key": "collaborations.co_contract_count", "absent_when": "privacy_settings.soroban = false" },
+      { "key": "score_breakdown", "absent_when": "ANY signal type is private (Option B)" },
+      { "key": "badges", "absent_when": "Never absent. Always an array. May be empty." }
+    ]
+  },
+  "never_include_fields": [
+    "passports.wallet_address", "passports.algorithm_version", "passports.ipfs_metadata_cid",
+    "passports.sybil_flag", "passports.privacy_settings", "passports.ai_summary_opt_in",
+    "passports.ai_summary_cache", "credentials.id", "credentials.wallet_address",
+    "credentials.source_id", "credentials.ingested_at", "credentials.data_hash",
+    "credentials.on_chain_tx", "credentials.is_private", "trust_score_snapshots.id",
+    "trust_score_snapshots.wallet_address", "trust_score_snapshots.algorithm_version",
+    "trust_score_snapshots.signal_hash", "trust_score_snapshots.on_chain_tx",
+    "badges.id", "badges.wallet_address", "badges.nft_address",
+    "badges.ipfs_metadata_cid", "badges.on_chain_tx", "contributor_edges.id",
+    "contributor_edges.from_address", "contributor_edges.to_address",
+    "contributor_edges.project_name", "contributor_edges.first_collaborated",
+    "contributor_edges.edge_weight"
+  ],
+  "validation_rules": {
+    "opt_in_gate": "ai_summary_opt_in must equal true before fetchPromptContext is called. Throws OptInRequiredError if false. No database read. No Anthropic API call.",
+    "word_count": { "minimum": 150, "maximum": 250, "method": "space-delimited tokens" },
+    "content_safety_regex": [
+      { "name": "stellar_address", "pattern": "G[0-9A-Z]{55}" },
+      { "name": "hex_hash", "pattern": "[0-9a-fA-F]{64}" }
+    ],
+    "max_retries": 1,
+    "retry_scope": "Across all failure types combined per generation cycle"
+  },
+  "model": "claude-sonnet-4-6",
+  "max_tokens": 1000,
+  "token_budget": {
+    "system_prompt_tokens": "~320",
+    "contributor_metadata_tokens": "~40",
+    "credentials_all_public_tokens": "~150",
+    "badges_max_10_tokens": "~80",
+    "collaborations_tokens": "~20",
+    "score_breakdown_all_public_tokens": "~30",
+    "total_all_public_tokens": "~665",
+    "total_all_private_tokens": "~385",
+    "expected_output_tokens": "~200-350",
+    "round_trip_ceiling_tokens": "~1015"
+  },
+  "changelog": [
+    {
+      "version": "1.0",
+      "date": "2026-06-13",
+      "issue": "#007",
+      "summary": "Initial schema. 42 fields across 5 FRD Section 17 models classified. Five open questions resolved. score_breakdown: Option B (full omission when any signal private). Absence: silent omission. All-signals-private: generate minimal summary. GitHub username: JSON context only. Legal review: deferred to future phase."
+    }
+  ]
+}
