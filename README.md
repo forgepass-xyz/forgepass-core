@@ -1,4 +1,5 @@
 # forgepass-core
+> Project board: https://github.com/orgs/forgepass-xyz/projects/2
 
 **The core monorepo for ForgePass — backend API, contributor dashboard, and documentation**
 
