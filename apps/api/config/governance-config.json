@@ -1,0 +1,13 @@
+{
+  "version": "1.0",
+  "default_contribution_ratio": 0.30,
+  "contribution_ratio_min": 0.10,
+  "contribution_ratio_max": 0.70,
+  "changelog": [
+    {
+      "version": "1.0",
+      "date": "2026-06-12",
+      "changes": "Initial governance weight config. Default 70/30 blend ratio. Per-DAO configurable range 0.10-0.70."
+    }
+  ]
+}
