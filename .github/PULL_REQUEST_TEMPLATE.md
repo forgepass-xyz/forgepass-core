@@ -15,6 +15,3 @@ Closes #
       it in the description using the full cross-repo form
       (`forgepass-xyz/<repo>#<number>`) rather than a closing keyword, per
       [CONTRIBUTING.md](../CONTRIBUTING.md#cross-repo-issue-linking-convention).
-- [ ] The linked issue's **Phase**, **Effort**, **Repo**, and **Epic** fields
-      are set on the
-      [ForgePass Development Board](https://github.com/orgs/forgepass-xyz/projects/2).
